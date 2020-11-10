@@ -11,7 +11,7 @@ Require Export Arith.Le.
 
 Require Export stlc1.
 Require Export stlc2.
-
+Require Import Omega.
 
 (* ############################################################ *)
 (* Definitions                                                  *)
@@ -36,6 +36,7 @@ with equiv_env : stack vl_stack -> venv -> venv_stack -> Prop :=
    Coq's auto-generated induction principles are not strong enough.
    Hence, we define our own nested induction principle *)
 
+       
 Definition eqv_nested_ind := fun
   (Pv : stack vl_stack -> vl -> vl_stack -> Prop)
   (Pe : stack vl_stack -> venv -> venv_stack -> Prop)
@@ -47,7 +48,7 @@ Definition eqv_nested_ind := fun
         get_stack_frame lS i = Some (fr, idx) ->
         Pe lS (Def vl H1 H2 idx) (H, (fr, idx)) ->
         Pv lS (vabs (Def vl H1 H2 idx) n t) (vabs_stack H i n t))
-  (fenv : forall (lS : stack vl_stack) (H1 : list vl) 
+  (fenv : forall (lS : stack vl_stack) (H1 : list vl)
          (H1s : list vl_stack) (H2 : list vl) (H2s : list vl_stack)
          (H20 : list vl),
        Forall2 (fun (v : vl) (vs : vl_stack) => Pv lS v vs) H1 H1s ->
