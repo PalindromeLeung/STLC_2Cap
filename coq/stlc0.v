@@ -807,6 +807,28 @@ Proof.
     simpl in HVL. destruct v; inversion HVL.
 Qed.
 
+Lemma tevalRec_deterministic :
+  forall v1 v2 env e cl ,
+    tevaln env e cl v1 -> tevaln env e cl v2 -> v1 = v2.
+Proof.
+  intros.
+  unfold tevaln in *.
+  destruct H, H0.
+  specialize H with (n :=  S(x + x0)). 
+  specialize H0 with (n := S(x + x0)).
+  assert ( Hx : S (x + x0) > x). omega. 
+  assert ( Hx0 : S (x + x0) > x0). omega. 
+  apply H in Hx.
+  apply H0 in Hx0.
+  rewrite  Hx in Hx0.
+  inversion Hx0. auto. 
+Qed.
 
-(*   HL  *)
-(* Redefine the evaluation strategy with recursion.    *)
+(* stating Top theorem about the environment. *)
+
+(* all Prog with no recursion cap will termniate.  *)
+
+(* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
+(* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
+                                      
+
