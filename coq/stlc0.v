@@ -165,46 +165,46 @@ Some None        means stuck
 Some (Some v))   means result v
 *)
 
-Fixpoint teval(k: nat)(env: venv)(t: tm)(n: class){struct k}: option (option vl) :=
+Fixpoint teval(k: nat)(env: venv)(t: tm)(n: class){struct k}: (nat * (option (option vl)) ):=
   match k with
-    | 0 => None
+    | 0 => (0, None)
     | S k' =>
       match t with
-        | ttrue      => Some (Some (vbool true))
-        | tfalse     => Some (Some (vbool false))
-        | tvar x     => Some (lookup x (sanitize_env n env))
-        | tabs m y   => Some (Some (vabs (sanitize_env n env) m y))
+        | ttrue      => (1, Some (Some (vbool true))) 
+        | tfalse     => (1, Some (Some (vbool false)))
+        | tvar x     => (1, Some (lookup x (sanitize_env n env)))
+        | tabs m y   => (1, Some (Some (vabs (sanitize_env n env) m y)))
         | tapp ef ex   =>
            match teval k' env ef Second with
-             | None => None
-             | Some None => Some None
-             | Some (Some (vbool _)) => Some None
-             | Some (Some (vrec _)) => Some None (* NEW *)
-             | Some (Some vcap) => Some None (* NEW *)
-             | Some (Some (vabs env2 m ey)) => (* NEW: vrec wrapper *)
-                match teval k' env ex m with
-                  | None => None
-                  | Some None => Some None
-                  | Some (Some vx) =>
-                       teval k' (expand_env (expand_env env2 (vrec (vabs env2 m ey)) Second) vx m) ey First
+             | (df, None) => (1 + df, None)
+             | (df, Some None) => (1 + df, Some None)
+             | (df, Some (Some (vbool _))) => (1 + df, Some None) 
+             | (df, Some (Some (vrec _))) => ( 1 + df, Some None)  (* NEW *)
+             | (df, Some (Some vcap))  => ( 1 + df, Some None) (* NEW *)
+             | (df, Some (Some (vabs env2 m ey))) => (* NEW: vrec wrapper *)
+                match teval (k' - df) env ex m with
+                  | (dx, None) => (1 + df + dx, None) 
+                  | (dx, Some None) => (1 + df + dx, Some None)
+                  | (dx, Some (Some vx)) =>
+                       teval (k' - df - dx) (expand_env (expand_env env2 (vrec (vabs env2 m ey)) Second) vx m) ey First
                 end
            end
         | tunrec er ec => (* NEW *)
           match teval k' env er n with
-          | None => None
-          | Some None => Some None
-          | Some (Some (vbool _)) => Some None
-          | Some (Some (vabs _ _ _)) => Some None
-          | Some (Some vcap) => Some None
-          | Some (Some (vrec v)) =>
-            match teval k' env ec n with (* should use Second instead of n? *)
-            | None => None
-            | Some None => Some None
-            | Some (Some (vbool _)) => Some None
-            | Some (Some (vabs _ _ _)) => Some None
-            | Some (Some (vrec _)) => Some None
-            | Some (Some vcap) =>
-              Some (Some v)
+          | (df, None) => ( 1 + df, None)
+          | (df, Some None)  => ( 1 + df, Some None) 
+          | (df, Some (Some (vbool _))) => (1 + df, Some None)
+          | (df, Some (Some (vabs _ _ _))) => (1 + df, Some None)
+          | (df, Some (Some vcap)) => (1 + df, Some None)
+          | (df, Some (Some (vrec v))) => 
+            match teval (k' - df) env ec n with (* should use Second instead of n? *)
+            | (dx ,None) => (1 + df + dx, None)
+            | (dx, Some None) => (1 + df + dx, Some None)
+            | (dx, Some (Some (vbool _))) =>(1 + df + dx, Some None)
+            | (dx, Some (Some (vabs _ _ _))) => (1 + df + dx, Some None)
+            | (dx, Some (Some (vrec _))) => (1 + df + dx, Some None)
+            | (dx, Some (Some vcap)) =>
+              (1 + df + dx, Some (Some v))
             end
           end
       end
@@ -828,7 +828,9 @@ Qed.
 
 (* all Prog with no recursion cap will termniate.  *)
 
+Lemma 
 (* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
 (* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
                                       
 
+(* This version doesn't seem to be updated as the definition of teval is not updated *)
