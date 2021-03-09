@@ -13,6 +13,7 @@
 Require Export Arith.EqNat.
 Require Export Arith.Le.
 (* From Coq Require Import omega.Omega. *)
+From Coq Require Import Lia.
 Require Import Lia.
 Require Import Coq.Lists.List.
 
@@ -59,7 +60,32 @@ Inductive tm : Type :=
 Inductive env (X: Type) :=
   | Def : list X -> list X -> nat -> env X.
 
-(* values *)
+
+(* Inductive vl : Type := *)
+(*   | vbool : bool -> vl *)
+(*   | vabs  : venv -> class -> tm -> vl *)
+(*   | vrec  : vl -> vl (* NEW: recursive wrapper *) *)
+(*   | vcap  : vl      (* NEW: capability *) *)
+(* with venv : Type := *)
+(*   | vnil : venv *)
+(*   | vcons : vl -> venv -> venv *)
+(* . *)
+
+(* Fixpoint vl_has_cap (v : vl) : bool := *)
+(*   match v with *)
+(*   | vbool _ => false *)
+(*   | vabs envvl cl tm => venv_has_cap envvl *)
+(*   | vrec vl => false *)
+(*   | vcap => true *)
+(*   end *)
+(* with venv_has_cap (env : venv) : bool := *)
+(*        match env with *)
+(*        | vnil => false *)
+(*        | vcons h t => orb (vl_has_cap h) (venv_has_cap t) *)
+(*        end *)
+(* . *)
+
+
 Inductive vl : Type :=
   | vbool : bool -> vl
   | vabs  : env vl -> class -> tm -> vl
@@ -70,9 +96,40 @@ Inductive vl : Type :=
 Definition venv := env vl.  (* value environments *)
 Definition tenv := env ty.  (* type environments  *)
 
+
+(* experimental approach to define the predicate.  *)
+Inductive val : Type :=
+| vabss : list val -> ty -> tm -> val
+| vty  : list val -> ty -> val
+.
+    
+Fixpoint contains_top (v : val): bool :=
+  match v with
+  | vabss env T tm =>
+    match T with
+    | TTop => existsb (contains_top) env
+    end
+  | vty env T =>
+    match T with
+    | TTop => existsb (contains_top) env
+    end
+  end.
+
+(* why would env is accepted here? *)
+(* where is TTop defined?      *)
+
+
 (* Atttempt to define predicate for venv.  *)
 
-
+(* Inductive vl' : Type := *)
+(*   | vbool : bool -> vl' *)
+(*   | vabs  : venv -> class -> tm -> vl' *)
+(*   | vrec  : vl' -> vl' (* NEW: recursive wrapper *) *)
+(*   | vcap  : vl'      (* NEW: capability *) *)
+(* with venv : Type := *)
+(*   | vnil : venv *)
+(*   | vcons : vl' -> venv -> venv *)
+(* . *)
 
 
 Hint Unfold venv.
@@ -578,15 +635,6 @@ Qed.
 Hint Immediate wf_sanitize.
    
 
-(* ### Theorem 3.5 ### *)
-(* if result of STLC 1/2 evaluation is not a timeout, then *)
-(* it is not stuck, and well-typed *)
-
-
-
-
-
-
 
 (* Alternative way to formalize saftely *)
 (* Theorem safety : forall k e n tenv venv res T, *)
@@ -601,7 +649,11 @@ Hint Immediate wf_sanitize.
 (*   - simpl in *. inversion H; subst. *)
 (*     apply pair_equal_spec in H2. destruct H2. rewrite <- H2 in H3. inversion H3. *)
 (*   - destruct e; inversion H; inversion H0; subst;  apply IHk; split; auto. *)
-(*     +   *)
+
+
+(* ### Theorem 3.5 ### *)
+(* if result of STLC 1/2 evaluation is not a timeout, then *)
+(* it is not stuck, and well-typed *)
 
 Theorem full_safety : forall k e n tenv venv res T,
   teval k venv e n = Some res -> has_type tenv e n T -> wf_env venv tenv ->
@@ -663,66 +715,66 @@ Proof.
 Qed.
 
 
-Theorem full_safety' : forall k e n tenv venv res T i,
-  teval' k venv e n = (i, Some res) -> has_type tenv e n T -> wf_env venv tenv ->
-  res_type res T.
+(* Theorem full_safety' : forall k e n tenv venv res T i, *)
+(*   teval' k venv e n = (i, Some res) -> has_type tenv e n T -> wf_env venv tenv -> *)
+(*   res_type res T. *)
 
-Proof.
-  intros k. induction k.
-  (* 0 *)   intros. inversion H.
-  (* S n *) intros. destruct e; inversion H; inversion H0.
+(* Proof. *)
+(*   intros k. induction k. *)
+(*   (* 0 *)   intros. inversion H. *)
+(*   (* S n *) intros. destruct e; inversion H; inversion H0. *)
  
-  - (* Case "True". *)  eapply not_stuck. eapply v_bool.
-  - (* Case "False". *) eapply not_stuck. eapply v_bool.
+(*   - (* Case "True". *)  eapply not_stuck. eapply v_bool. *)
+(*   - (* Case "False". *) eapply not_stuck. eapply v_bool. *)
 
-  - (* Case "Var". *)
-    subst.
-    destruct (lookup_safe_ex (sanitize_env n venv0) (sanitize_env n tenv0) T v) as [va [I V]]; eauto.
-    rewrite I. eapply not_stuck. eapply V.
+(*   - (* Case "Var". *) *)
+(*     subst. *)
+(*     destruct (lookup_safe_ex (sanitize_env n venv0) (sanitize_env n tenv0) T v) as [va [I V]]; eauto. *)
+(*     rewrite I. eapply not_stuck. eapply V. *)
     
-  - (* Case "App". *)
-    subst T. subst. remember (teval' k venv0 e1 Second) as tf.
-    destruct tf as [rf].
-    try inversion H3. 
-    assert (res_type res (TFun T1 m T2)) as HRF. { eapply IHk; eauto. instantiate (1:= i). 
-                                                   rewrite <-  Heqtf. clear H3. inversion H4.
+(*   - (* Case "App". *) *)
+(*     subst T. subst. remember (teval' k venv0 e1 Second) as tf. *)
+(*     destruct tf as [rf]. *)
+(*     try inversion H3.  *)
+(*     assert (res_type res (TFun T1 m T2)) as HRF. { eapply IHk; eauto. instantiate (1:= i).  *)
+(*                                                    rewrite <-  Heqtf. clear H3. inversion H4. *)
                                                    
-    inversion HRF as [vf TF HVF]. inversion HVF.
-    subst rf. subst vf.
+(*     inversion HRF as [vf TF HVF]. inversion HVF. *)
+(*     subst rf. subst vf. *)
 
-    remember (teval k venv0 e2 m0) as tx.
-    destruct tx as [rx|]; try inversion H3.
-    assert (res_type rx T1) as HRX. { subst. eapply IHk; eauto. }
-    inversion HRX as [vx]. subst rx T.
+(*     remember (teval k venv0 e2 m0) as tx. *)
+(*     destruct tx as [rx|]; try inversion H3. *)
+(*     assert (res_type rx T1) as HRX. { subst. eapply IHk; eauto. } *)
+(*     inversion HRX as [vx]. subst rx T. *)
 
-    subst. eapply IHk. eauto. eauto.
-    (* WF on expanded env *)
-    constructor. eauto. constructor. eauto. eauto. eauto. apply wf_idx. eauto.
+(*     subst. eapply IHk. eauto. eauto. *)
+(*     (* WF on expanded env *) *)
+(*     constructor. eauto. constructor. eauto. eauto. eauto. apply wf_idx. eauto. *)
 
-  - (* Case "Abs". *) intros. inversion H. inversion H0.
-    eapply not_stuck. eapply v_abs; eauto.
-    eauto.
-  - (* Case "Rec". *)
-    remember (teval k venv0 e1 n) as tevr.
+(*   - (* Case "Abs". *) intros. inversion H. inversion H0. *)
+(*     eapply not_stuck. eapply v_abs; eauto. *)
+(*     eauto. *)
+(*   - (* Case "Rec". *) *)
+(*     remember (teval k venv0 e1 n) as tevr. *)
 
-    destruct tevr as [revr|]; try inversion H3.
-    assert (res_type revr (TRec T)) as HRR. {
-     subst. eapply IHk; eauto.
-    }
+(*     destruct tevr as [revr|]; try inversion H3. *)
+(*     assert (res_type revr (TRec T)) as HRR. { *)
+(*      subst. eapply IHk; eauto. *)
+(*     } *)
 
-    inversion HRR as [? vr]. inversion H10. subst.
+(*     inversion HRR as [? vr]. inversion H10. subst. *)
 
-    remember (teval k venv0 e2 n) as tevc.
-    destruct tevc as [revc|]; try inversion H11.
-    assert (res_type revc TCap) as HRC. {
-      subst. eapply IHk; eauto.
-    }
-    inversion HRC as [? vc]. inversion H2. subst.
-    (* NOTE: if there is no val_type case for vcap this inversion fails *)
-(*     and recursion is impossible in well-formed envs *)
+(*     remember (teval k venv0 e2 n) as tevc. *)
+(*     destruct tevc as [revc|]; try inversion H11. *)
+(*     assert (res_type revc TCap) as HRC. { *)
+(*       subst. eapply IHk; eauto. *)
+(*     } *)
+(*     inversion HRC as [? vc]. inversion H2. subst. *)
+(*     (* NOTE: if there is no val_type case for vcap this inversion fails *) *)
+(* (*     and recursion is impossible in well-formed envs *) *)
     
-    inversion H4. subst. eauto.
-Qed.
+(*     inversion H4. subst. eauto. *)
+(* Qed. *)
 
 
 (* Strong Normalization for STLC *)
@@ -735,12 +787,14 @@ Qed.
 (* From this follows both type soundness and strong      *)
 (* normalization for STLC.                               *)
 
-Definition tevaln env e cl v := exists nm , forall n, exists bt, n > nm -> n >= bt -> teval n env e cl = (bt, Some (Some v)) /\ n >= bt . 
+Definition tevaln env e cl v := exists nm, forall n, n > nm -> teval n env e cl = Some (Some v).
+
+Definition tevaln' env e cl v := exists nm , forall n, exists bt, n > nm -> n >= bt -> teval' n env e cl = (bt, Some (Some v)) /\ n >= bt . 
 (* n is the number of evaluation step. Without any type discipline, LC is turing complete. Do induction on number of evaluation steps ( the fuel ) *) 
 (* This tevaln definition is about termination, outer Some is about termination and the inner Some is about getting an actual value. *)
 
 (* need to use Fixpoint because of positivity restriction *)
-Fixpoint val_type_tnt (v:vl) (T:ty): Prop :=
+Fixpoint val_type_tnt (v : vl) (T : ty): Prop :=
   match v, T with
   | vbool b, TBool => True
   | vabs env clv y, TFun T1 clt T2 =>
@@ -748,13 +802,14 @@ Fixpoint val_type_tnt (v:vl) (T:ty): Prop :=
     exists v, tevaln (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y First v /\ val_type_tnt v T2)
                      
   | vrec v, TRec T => True (* NEW: rec, but we can't do anything with it *)
+  (* | vcap, TCap => True  HL : does the vcap case count? *) 
   | _,_ => False
   end.
 
 
 Inductive wf_env_tnt : venv -> tenv -> Prop := 
 | wfe_tnt_nil : forall n, wf_env_tnt (Def vl nil nil n) (Def ty nil nil n)
-| wfe_tnt_env : forall v t vs ts n,
+| wfe_tnt_env : forall v t vs ts n, 
     val_type_tnt v t ->
     wf_env_tnt vs ts ->
     get_inv_idx vs = get_inv_idx ts ->
@@ -891,63 +946,57 @@ Hint Immediate wf_sanitize_tnt.
 (* if well-typed, then result is an actual value (not stuck and not a timeout),
    for large enough n *)
 
-
-
-
-
 Theorem full_total_safety : forall e cl tenv T,
-  has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv ->
+  has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv -> 
   exists v, tevaln venv e cl v /\ val_type_tnt v T.
-
-(* Proof. *)
-(*   intros ? ? ? ? W. *)
-(*   induction W; intros ? WFE. *)
+Proof.
+  intros ? ? ? ? W.
+  induction W; intros ? WFE.
   
-(*   - (* Case "True". *) eexists. split. *)
-(*     exists 0. intros. destruct n. exists 0. intros. *)
-(*     omega. simpl. eauto. simpl. eauto. *)
-(*   - (* Case "False". *) eexists. split. *)
-(*     exists 0. intros. destruct n0. omega. simpl. eauto. simpl. eauto. *)
+  - (* Case "True". *) eexists. split.
+    exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
+  - (* Case "False". *) eexists. split.
+    exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
 
-(*   - (* Case "Var". *) *)
-(*     destruct (lookup_safe_ex_tnt (sanitize_env n venv0) (sanitize_env n env0) T1 x) as [v IV]. eauto. eauto. *)
-(*     inversion IV as [I V]. *)
+  - (* Case "Var". *)
+    destruct (lookup_safe_ex_tnt (sanitize_env n venv0) (sanitize_env n env0) T1 x) as [v IV]. eauto. eauto.
+    inversion IV as [I V].
 
-(*     exists v. split. exists 0. intros. destruct n0. omega. simpl. rewrite I. eauto. eapply V. *)
+    exists v. split. exists 0. intros. destruct n0. lia. simpl. rewrite I. eauto. eapply V.
 
-(*   - (* Case "App". *) *)
-(*     destruct (IHW1 venv0 WFE) as [vf [IW1 HVF]]. *)
-(*     destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]]. *)
+  - (* Case "App". *)
+    destruct (IHW1 venv0 WFE) as [vf [IW1 HVF]].
+    destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]].
 
-(*     simpl in HVF. destruct vf; try contradiction. *)
-(*     destruct HVF  as [? IHF]. *)
+    simpl in HVF. destruct vf; try contradiction.
+    destruct HVF  as [? IHF].
 
-(*     destruct (IHF vx HVX) as [vy [IW3 HVY]]. *)
+    destruct (IHF vx HVX) as [vy [IW3 HVY]].
 
-(*     exists vy. split. { *)
-(*       (* pick large enough n. nf+nx+ny will do. *) *)
-(*       destruct IW1 as [nf IWF]. *)
-(*       destruct IW2 as [nx IWX]. *)
-(*       destruct IW3 as [ny IWY]. *)
-(*       exists (S (nf+nx+ny)). intros. destruct n0. omega. simpl. subst c. *)
-(*       rewrite IWF. rewrite IWX. rewrite IWY. eauto. *)
-(*       omega. omega. omega. *)
-(*     } *)
-(*     eapply HVY. *)
+    exists vy. split. {
+      (* pick large enough n. nf+nx+ny will do. *)
+      destruct IW1 as [nf IWF].
+      destruct IW2 as [nx IWX].
+      destruct IW3 as [ny IWY].
+      exists (S (nf+nx+ny)). intros. destruct n0. lia. simpl. subst c.
+      rewrite IWF. rewrite IWX. rewrite IWY. eauto.
+      lia. lia. lia.
+    }
+    eapply HVY.
     
-(*   - (* Case "Abs". *) *)
-(*     eexists. split. exists 0. intros. destruct n0. omega. simpl. eauto. *)
-(*     simpl. repeat split; eauto. intros. *)
+  - (* Case "Abs". *)
+    eexists. split. exists 0. intros. destruct n0. lia. simpl. eauto.
+    simpl. repeat split; eauto. intros.
 
-(*     eapply IHW. *)
-(*     constructor. eauto. constructor. simpl; eauto. eauto. *)
-(*     eapply wf_idx_tnt. eauto. eapply wf_idx_tnt. *)
-(*     constructor. simpl; eauto. eauto. eapply wf_idx_tnt. eauto. *)
+    eapply IHW.
+    constructor. eauto. constructor. simpl; eauto. eauto.
+    eapply wf_idx_tnt. eauto. eapply wf_idx_tnt.
+    constructor. simpl; eauto. eauto. eapply wf_idx_tnt. eauto.
     
-(*   - (* Case tunrec *) *)
-(*     destruct (IHW2 _ WFE) as [v [HEV HVL]]. *)
-(*     simpl in HVL. destruct v; inversion HVL. *)
-(* Qed. *)
+  - (* Case tunrec *)
+    destruct (IHW2 _ WFE) as [v [HEV HVL]].
+    simpl in HVL. destruct v; inversion HVL.
+Qed.
 
 
 (* Lemma tevalRec_deterministic : *)
@@ -973,57 +1022,6 @@ Theorem full_total_safety : forall e cl tenv T,
 (* all Prog with no recursion cap will termniate.  *)
 
 
-(* Fixpoint venv_has_cap  (ve : venv) : bool := *)
-(*   match ve with *)
-(*   | Def _ l1 l2 _ => *)
-(*     match l1 with *)
-(*     | [] => *)
-(*       match l2 with *)
-(*       | [] => false *)
-(*       | h :: t => match h with *)
-(*                 | vbool _ => *)
-(*                   let fix l_has_cap(l : list vl) : bool := *)
-(*                       match l with *)
-(*                       | [] => false *)
-(*                       | h :: t => *)
-(*                         match h with *)
-(*                         | vbool _ => l_has_cap t *)
-(*                         | vabs envvl cl tm => venv_has_cap (envvl) *)
-(*                         | vrec vl => false  *)
-(*                         | vcap => true *)
-(*                         end *)
-(*                       end *)
-(*                   in l_has_cap t *)
-(*                 | vabs envvl cl tm => venv_has_cap (envvl) *)
-(*                 | vrec vl => false  *)
-(*                 | vcap => true *)
-(*                 end *)
-(*       end *)
-(*     | h :: t => *)
-(*       match l2 with *)
-(*       | [] => false *)
-(*       | h :: t => match h with *)
-(*                 | vbool _ => *)
-(*                   let fix l_has_cap(l : list vl) : bool := *)
-(*                       match l with *)
-(*                       | [] => false *)
-(*                       | h :: t => *)
-(*                         match h with *)
-(*                         | vbool _ => l_has_cap t *)
-(*                         | vabs envvl cl tm => venv_has_cap (envvl) *)
-(*                         | vrec vl => false  *)
-(*                         | vcap => true *)
-(*                         end *)
-(*                       end *)
-(*                   in l_has_cap t *)
-(*                 | vabs envvl cl tm => venv_has_cap (envvl) *)
-(*                 | vrec vl => false  *)
-(*                 | vcap => true *)
-(*                 end *)
-(*       end *)
-(*     end *)
-(*   end *)
-(* . *)
 
 Fixpoint map {X Y: Type} (f:X -> Y) (l:list X) : (list Y) :=
   match l with
@@ -1054,31 +1052,35 @@ Fixpoint  isRecCap (val : vl) : bool :=
   | _ => false 
   end
 .
-
-Fixpoint contain_red {X : Type} (ve : venv) (k : nat) : bool :=
-  match ve with
-    | Def _ l1 l2 
-
-Fixpoint contain_RecCap_aux {X : Type} (ve : venv) (k : nat) : list bool :=
-  match ve with
-  | Def _ l1 l2 m =>
-    match l1 ++ l2 with
-    | [ ] => false 
-    | x :: xs => match val_type ve (teval k ve x (get_class x)(* value *)) with
-               | v_abs => ??
-               | v_rec => ??
-               | v_cap => ??
-               end
-    end
-  end
-.
-                              
-Fixpoint contain_RecCap {X : Type} (ve : venv) (k : nat) : bool :=
-  fold orb (map contain_2cap_aux ve k) false.  
-                                                           
-Lemma venv_noRecCap_terminate:
-  
       
 (* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
 (* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
+Fixpoint contains_cap (v : vl) : bool :=
+  match v with
+  | vbool _ => false
+  | vabs envval cl tm =>
+    match envval with
+      Def _ l1 l2 _ => orb (existsb contains_cap l1) (existsb contains_cap l2)
+    end
+  | vrec vl => false
+  | vcap => true
+  end
+.
 
+Fixpoint venv_contains_cap (vn : venv) : bool :=
+  match vn with
+  | Def _ l1 l2 _ => orb (existsb contains_cap l1) (existsb contains_cap l2)
+  end
+.
+
+(* termination proof when there's no recursion capability in the venv *)
+(* stemmed from the full_total_safety theorem *)
+
+Lemma termination : forall e cl tenv T,
+  has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false -> 
+  exists v, tevaln venv e cl v /\ val_type_tnt v T.
+Proof.
+
+    
+Admitted.
+                                                                 
