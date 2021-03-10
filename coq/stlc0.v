@@ -953,28 +953,27 @@ Proof.
   intros ? ? ? ? W.
   induction W; intros ? WFE.
   
-  - (* Case "True". *) eexists. split.
+  - (* Case "True". *) eexists. split. 
     exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
   - (* Case "False". *) eexists. split.
     exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
 
   - (* Case "Var". *)
-    destruct (lookup_safe_ex_tnt (sanitize_env n venv0) (sanitize_env n env0) T1 x) as [v IV]. eauto. eauto.
+    destruct (lookup_safe_ex_tnt (sanitize_env n venv0) (sanitize_env n env0) T1 x) as [v IV].
+    eauto. eauto.
     inversion IV as [I V].
-
     exists v. split. exists 0. intros. destruct n0. lia. simpl. rewrite I. eauto. eapply V.
 
   - (* Case "App". *)
+    (* destruct (IHW1 venv0 WFE). *)
     destruct (IHW1 venv0 WFE) as [vf [IW1 HVF]].
     destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]].
-
     simpl in HVF. destruct vf; try contradiction.
     destruct HVF  as [? IHF].
-
     destruct (IHF vx HVX) as [vy [IW3 HVY]].
 
     exists vy. split. {
-      (* pick large enough n. nf+nx+ny will do. *)
+      (* pick large enough n. nf+nx+ny will do. *) (* HL : how to make sure this is big enough? *) 
       destruct IW1 as [nf IWF].
       destruct IW2 as [nx IWX].
       destruct IW3 as [ny IWY].
@@ -1080,7 +1079,60 @@ Lemma termination : forall e cl tenv T,
   has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false -> 
   exists v, tevaln venv e cl v /\ val_type_tnt v T.
 Proof.
+  intros ? ? ? ? W.
+  induction W; intros ? WFE.
+  
+  - (* Case "True". *) eexists. split. 
+    exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
+  - (* Case "False". *) eexists. split.
+    exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
 
+  - (* Case "Var". *)
+    destruct (lookup_safe_ex_tnt (sanitize_env n venv0) (sanitize_env n env0) T1 x) as [v IV].
+    eauto. destruct WFE. eauto. eauto.
+
+    exists v. split. exists 0. intros. destruct n0; try lia; simpl; try repeat(destruct IV as [L VT]); try rewrite L; eauto. destruct IV as [L VT]; eauto.
+
+
+  - (* Case "App". *)
+    (* destruct (IHW1 venv0 WFE). *)
+    destruct (IHW1 venv0 WFE) as [vf [IW1 HVF]].
+    destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]].
+    simpl in HVF. destruct vf; try contradiction.
+    destruct HVF  as [? IHF].
+    destruct (IHF vx HVX) as [vy [IW3 HVY]].
+
+    exists vy. split. {
+      (* pick large enough n. nf+nx+ny will do. *) (* HL : how to make sure this is big enough? *) 
+      destruct IW1 as [nf IWF].
+      destruct IW2 as [nx IWX].
+      destruct IW3 as [ny IWY].
+      exists (S (nf+nx+ny)). intros. destruct n0. lia. simpl. subst c.
+      rewrite IWF. rewrite IWX. rewrite IWY. eauto.
+      lia. lia. lia.
+    }
+    eapply HVY.
+
+  - (* Case "Abs". *)
+    eexists. split. exists 0. intros. destruct n0. lia. simpl. eauto.
+    simpl. repeat split; eauto. intros.
+
+    eapply IHW.
+    constructor. eauto. constructor. simpl; eauto.
+    destruct WFE as [WF CF]. constructor. simpl; eauto. eauto.
     
+    eapply wf_idx_tnt. eauto. eapply wf_idx_tnt.
+    constructor. simpl; eauto. eauto.
+
+    destruct WFE. eauto.
+    eapply wf_idx_tnt. destruct WFE. eauto.
+
+    destruct venv0. admit.
+    
+  - (* Case tunrec *)
+    destruct (IHW2 _ WFE) as [v [HEV HVL]].
+    simpl in HVL. destruct v; inversion HVL.
 Admitted.
-                                                                 
+
+
+                                                  
