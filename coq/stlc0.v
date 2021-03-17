@@ -93,8 +93,11 @@ Inductive vl : Type :=
   | vcap  : vl      (* NEW: capability *)
 .
 
+
 Definition venv := env vl.  (* value environments *)
 Definition tenv := env ty.  (* type environments  *)
+        
+
 
 
 (* experimental approach to define the predicate.  *)
@@ -269,7 +272,7 @@ Fixpoint teval(k: nat)(env: venv)(t: tm)(n: class){struct k}: option (option vl)
             | Some (Some (vabs _ _ _)) => Some None
             | Some (Some (vrec _)) => Some None
             | Some (Some vcap) =>
-              Some (Some v)
+              Some (Some v) (* one more step of unfolding *)
             end
           end
       end
@@ -735,8 +738,8 @@ Qed.
 (*   - (* Case "App". *) *)
 (*     subst T. subst. remember (teval' k venv0 e1 Second) as tf. *)
 (*     destruct tf as [rf]. *)
-(*     try inversion H3.  *)
-(*     assert (res_type res (TFun T1 m T2)) as HRF. { eapply IHk; eauto. instantiate (1:= i).  *)
+(*     try inversion H3. *)
+(*     assert (res_type res (TFun T1 m T2)) as HRF. { eapply IHk; eauto. instantiate (1:= i). *)
 (*                                                    rewrite <-  Heqtf. clear H3. inversion H4. *)
                                                    
 (*     inversion HRF as [vf TF HVF]. inversion HVF. *)
@@ -794,15 +797,34 @@ Definition tevaln' env e cl v := exists nm , forall n, exists bt, n > nm -> n >=
 (* This tevaln definition is about termination, outer Some is about termination and the inner Some is about getting an actual value. *)
 
 (* need to use Fixpoint because of positivity restriction *)
+
+Fixpoint contains_cap (v : vl) : bool :=
+  match v with
+  | vbool _ => false
+  | vabs envval cl tm =>
+    match envval with
+      Def _ l1 l2 _ => orb (existsb contains_cap l1) (existsb contains_cap l2)
+    end
+  | vrec vl => false
+  | vcap => true
+  end
+.
+
+Fixpoint venv_contains_cap (vn : venv) : bool :=
+  match vn with
+  | Def _ l1 l2 _ => orb (existsb contains_cap l1) (existsb contains_cap l2)
+  end
+.
+
+
 Fixpoint val_type_tnt (v : vl) (T : ty): Prop :=
   match v, T with
   | vbool b, TBool => True
-  | vabs env clv y, TFun T1 clt T2 =>
-    (clv = clt) /\ (forall vx, val_type_tnt vx T1 ->
-    exists v, tevaln (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y First v /\ val_type_tnt v T2)
-                     
+  | vabs env clv y, TFun T1 clt T2 => (* HL: do we need any restriction on the env here??? *)
+    (clv = clt) /\ venv_contains_cap env = false /\
+    (forall vx, val_type_tnt vx T1 ->
+           exists v, tevaln (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y First v /\ val_type_tnt v T2)
   | vrec v, TRec T => True (* NEW: rec, but we can't do anything with it *)
-  (* | vcap, TCap => True  HL : does the vcap case count? *) 
   | _,_ => False
   end.
 
@@ -942,7 +964,36 @@ Qed.
 
 Hint Immediate wf_sanitize_tnt.
 
+Fixpoint is_cap (v : vl) : bool :=
+  match v with
+    | vcap => true 
+    | _ => false
+  end
+.
 
+Lemma cap_no_propagation : forall vn n x,
+    venv_contains_cap vn = false ->
+    is_cap(x) = false -> 
+    venv_contains_cap (expand_env vn x n) = false.
+Proof.
+  intros.
+  induction x; destruct n; destruct vn eqn: val_env; inversion H; simpl; eauto.
+  - rewrite H2.
+    unfold existsb. destruct e. 
+    assert (left : existsb contains_cap l = false).
+    assert (right : existsb contains_cap l0 = false).
+    inversion H2.
+    
+Admitted.
+                        
+Lemma cap_sanitize_irrelevant :
+  forall n vn, venv_contains_cap vn = false ->
+          venv_contains_cap (sanitize_env n vn) = false.
+  Proof.
+    intros.
+    induction vn. destruct n; inversion H; auto.
+  Qed.
+  
 (* if well-typed, then result is an actual value (not stuck and not a timeout),
    for large enough n *)
 
@@ -970,10 +1021,11 @@ Proof.
     destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]].
     simpl in HVF. destruct vf; try contradiction.
     destruct HVF  as [? IHF].
-    destruct (IHF vx HVX) as [vy [IW3 HVY]].
+    destruct IHF as [vnFalse IHF'].
+    destruct (IHF' vx HVX) as [vy [IW3 HVY]].
 
     exists vy. split. {
-      (* pick large enough n. nf+nx+ny will do. *) (* HL : how to make sure this is big enough? *) 
+      (* pick large enough n. nf+nx+ny will do. *) 
       destruct IW1 as [nf IWF].
       destruct IW2 as [nx IWX].
       destruct IW3 as [ny IWY].
@@ -986,7 +1038,10 @@ Proof.
   - (* Case "Abs". *)
     eexists. split. exists 0. intros. destruct n0. lia. simpl. eauto.
     simpl. repeat split; eauto. intros.
+    
+    admit.
 
+    intros.
     eapply IHW.
     constructor. eauto. constructor. simpl; eauto. eauto.
     eapply wf_idx_tnt. eauto. eapply wf_idx_tnt.
@@ -994,8 +1049,9 @@ Proof.
     
   - (* Case tunrec *)
     destruct (IHW2 _ WFE) as [v [HEV HVL]].
-    simpl in HVL. destruct v; inversion HVL.
-Qed.
+    simpl in HVL. destruct v;  inversion HVL.
+    
+Admitted.
 
 
 (* Lemma tevalRec_deterministic : *)
@@ -1054,29 +1110,15 @@ Fixpoint  isRecCap (val : vl) : bool :=
       
 (* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
 (* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
-Fixpoint contains_cap (v : vl) : bool :=
-  match v with
-  | vbool _ => false
-  | vabs envval cl tm =>
-    match envval with
-      Def _ l1 l2 _ => orb (existsb contains_cap l1) (existsb contains_cap l2)
-    end
-  | vrec vl => false
-  | vcap => true
-  end
-.
 
-Fixpoint venv_contains_cap (vn : venv) : bool :=
-  match vn with
-  | Def _ l1 l2 _ => orb (existsb contains_cap l1) (existsb contains_cap l2)
-  end
-.
 
 (* termination proof when there's no recursion capability in the venv *)
 (* stemmed from the full_total_safety theorem *)
 
+
+
 Lemma termination : forall e cl tenv T,
-  has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false -> 
+    has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false ->
   exists v, tevaln venv e cl v /\ val_type_tnt v T.
 Proof.
   intros ? ? ? ? W.
@@ -1100,7 +1142,8 @@ Proof.
     destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]].
     simpl in HVF. destruct vf; try contradiction.
     destruct HVF  as [? IHF].
-    destruct (IHF vx HVX) as [vy [IW3 HVY]].
+    destruct IHF as [veFalse IHF'].
+    destruct (IHF' vx HVX) as [vy [IW3 HVY]].
 
     exists vy. split. {
       (* pick large enough n. nf+nx+ny will do. *) (* HL : how to make sure this is big enough? *) 
@@ -1116,7 +1159,9 @@ Proof.
   - (* Case "Abs". *)
     eexists. split. exists 0. intros. destruct n0. lia. simpl. eauto.
     simpl. repeat split; eauto. intros.
-
+    destruct WFE as [WF VEF].
+    eapply cap_sanitize_irrelevant. auto.
+    intros.
     eapply IHW.
     constructor. eauto. constructor. simpl; eauto.
     destruct WFE as [WF CF]. constructor. simpl; eauto. eauto.
@@ -1126,13 +1171,14 @@ Proof.
 
     destruct WFE. eauto.
     eapply wf_idx_tnt. destruct WFE. eauto.
-
-    destruct venv0. admit.
+    destruct WFE. 
+    eapply cap_no_propagation.
+    eapply cap_no_propagation.
+    eapply cap_sanitize_irrelevant; eauto.
     
   - (* Case tunrec *)
     destruct (IHW2 _ WFE) as [v [HEV HVL]].
     simpl in HVL. destruct v; inversion HVL.
-Admitted.
-
+Qed.
 
                                                   
