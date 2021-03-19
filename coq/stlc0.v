@@ -964,28 +964,17 @@ Qed.
 
 Hint Immediate wf_sanitize_tnt.
 
-Fixpoint is_cap (v : vl) : bool :=
-  match v with
-    | vcap => true 
-    | _ => false
-  end
-.
-
 Lemma cap_no_propagation : forall vn n x,
     venv_contains_cap vn = false ->
-    is_cap(x) = false -> 
+    contains_cap x = false -> 
     venv_contains_cap (expand_env vn x n) = false.
+
 Proof.
-  intros.
-  induction x; destruct n; destruct vn eqn: val_env; inversion H; simpl; eauto.
-  - rewrite H2.
-    unfold existsb. destruct e. 
-    assert (left : existsb contains_cap l = false).
-    assert (right : existsb contains_cap l0 = false).
-    inversion H2.
-    
-Admitted.
-                        
+  intros. destruct vn.
+  simpl in H. apply Bool.orb_false_elim in H. destruct H as [ncl ncl0].
+  destruct n; simpl; intuition.
+Qed.
+
 Lemma cap_sanitize_irrelevant :
   forall n vn, venv_contains_cap vn = false ->
           venv_contains_cap (sanitize_env n vn) = false.
@@ -1051,7 +1040,7 @@ Proof.
     destruct (IHW2 _ WFE) as [v [HEV HVL]].
     simpl in HVL. destruct v;  inversion HVL.
     
-Admitted.
+Admitted. (* old theorem that can't be proven, as it doesn't have the essential premises on whether the value environment has rec capability or not *)
 
 
 (* Lemma tevalRec_deterministic : *)
