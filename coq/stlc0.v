@@ -1098,6 +1098,14 @@ Fixpoint  isRecCap (val : vl) : bool :=
 .
 
 
+Notation "{{ ' p @ k | P }}" := (fun k v => match v with
+                                      | p => P
+                                      | _ => False
+                                      end)
+                              (at level 0, p pattern, k ident ).
+Notation "{{ ' p }}" := {{ ' p @ k | True }} (at level 0, p pattern).
+Notation "∅" := (fun k v => False).
+
 Inductive mode : Type :=
 | L : mode
 | P : mode
@@ -1106,53 +1114,33 @@ Inductive mode : Type :=
 (*TODO: formulate an environment relation that combines the requirements for logical and programmatic fragment, as in Zombie *)
 (*TODO: state and prove the combined soundness/termination theorem*)
 (*TODO: soundness and termination interpretations use two different evaluations teval/teval', there should be just a single one. *)
-Fixpoint logrel (T:ty) (m:mode) (k:nat) : vl -> Prop :=
+Fixpoint logrel (T:ty) (m:mode) : nat -> vl -> Prop :=
   match T with
-  | TBool => fun v => (* these could be made more readable with comprehension notations, c.f. logrel_ecoop.v *)
-              match v with
-              | vbool _ => True
-              | _ => False
-              end
+  | TBool          => {{ '(vbool _) }}
   | TFun T1 clt T2 => match m with
-                   | L => fun v =>
-                           match v with
-                           | vabs env clv y =>
-                             (clv = clt) /\ venv_contains_cap env = false
-                             /\ forall k', k' <= k -> forall vx, logrel T1 L k' vx ->
-                                 exists vy, tevaln (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y First vy /\ logrel T2 L k' vy (* under which class should the lambda body evaluate? *)
-
-                           | _ => False
-                           end
-                   | P => fun v =>
-                           match v with
-                           | vabs env clv y =>
-                             (clv = clt) /\ forall k', k' < k ->
-                                                 forall vx, logrel T1 P k' vx ->
-                                                       forall vy, teval k' (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y clv = Some (Some vy) ->
-                                                             logrel T2 P (k - k') vy (* it would be more elegant if the evaluator returns the *remaining* instead of the *used amount* of fuel, as teval' does currently. Then we can pass the remaining fuel to the logrel (should be stricly less than input fuel k) and don't need the explicit subtraction   *)
-                           | _ => False
-                           end
-                   end
-  | TRec T => match m with
-             | L => fun v =>
-                     match v with
-                     | vrec _ => True
-                     | _ => False
+                     | L => {{ '(vabs env clv y) @ k | (clv = clt)
+                                                     /\ venv_contains_cap env = false
+                                                     /\ forall j, j <= k ->
+                                                            forall vx, logrel T1 L j vx ->
+                                                                  (* would it be necessary to use the step index as the fuel for teval here? *)
+                                                                  (* under which class should the lambda body evaluate? *)
+                                                                   exists vy, tevaln (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y First vy
+                                                                         /\ logrel T2 L j vy }}
+                     | P => {{ '(vabs env clv y) @ k | (clv = clt)
+                                                     /\ forall i, i < k ->
+                                                            forall vx, logrel T1 P i vx ->
+                                                                  forall j, j <= i ->
+                                                                       forall vy, teval j (expand_env (expand_env env (vrec (vabs env clv y)) Second) vx clv) y clv = Some (Some vy) ->
+                                                                             logrel T2 P (k - j) vy (* it would be more elegant if the evaluator returns the *remaining* instead of the *used amount* of fuel, as teval' does currently. Then we can pass the remaining fuel to the logrel (should be stricly less than input fuel k) and don't need the explicit subtraction   *) }}
                      end
-             | P => fun v =>
-                     match v with
-                     | vrec v => forall k', k' < k -> logrel T P k' v
-                     | _ => False
+  | TRec T         => match m with
+                     | L => {{ 'vrec _ }}
+                     | P => {{ '(vrec v) @ k | forall j, j < k -> logrel T P j v }}
                      end
-             end
-  | TCap => match m with
-           | L => fun _ => False
-           | P => fun v =>
-                   match v with
-                   | vcap => True
-                   | _ => False
-                   end
-           end
+  | TCap           => match m with
+                     | L => ∅
+                     | P => {{ 'vcap }}
+                     end
   end
 .
 
