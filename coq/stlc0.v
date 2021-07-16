@@ -61,31 +61,6 @@ Inductive env (X: Type) :=
   | Def : list X -> list X -> nat -> env X.
 
 
-(* Inductive vl : Type := *)
-(*   | vbool : bool -> vl *)
-(*   | vabs  : venv -> class -> tm -> vl *)
-(*   | vrec  : vl -> vl (* NEW: recursive wrapper *) *)
-(*   | vcap  : vl      (* NEW: capability *) *)
-(* with venv : Type := *)
-(*   | vnil : venv *)
-(*   | vcons : vl -> venv -> venv *)
-(* . *)
-
-(* Fixpoint vl_has_cap (v : vl) : bool := *)
-(*   match v with *)
-(*   | vbool _ => false *)
-(*   | vabs envvl cl tm => venv_has_cap envvl *)
-(*   | vrec vl => false *)
-(*   | vcap => true *)
-(*   end *)
-(* with venv_has_cap (env : venv) : bool := *)
-(*        match env with *)
-(*        | vnil => false *)
-(*        | vcons h t => orb (vl_has_cap h) (venv_has_cap t) *)
-(*        end *)
-(* . *)
-
-
 Inductive vl : Type :=
   | vbool : bool -> vl
   | vabs  : env vl -> class -> tm -> vl
@@ -96,43 +71,6 @@ Inductive vl : Type :=
 
 Definition venv := env vl.  (* value environments *)
 Definition tenv := env ty.  (* type environments  *)
-
-
-
-
-(* experimental approach to define the predicate.  *)
-Inductive val : Type :=
-| vabss : list val -> ty -> tm -> val
-| vty  : list val -> ty -> val
-.
-
-Fixpoint contains_top (v : val): bool :=
-  match v with
-  | vabss env T tm =>
-    match T with
-    | TTop => existsb (contains_top) env
-    end
-  | vty env T =>
-    match T with
-    | TTop => existsb (contains_top) env
-    end
-  end.
-
-(* why would env is accepted here? *)
-(* where is TTop defined?      *)
-
-
-(* Atttempt to define predicate for venv.  *)
-
-(* Inductive vl' : Type := *)
-(*   | vbool : bool -> vl' *)
-(*   | vabs  : venv -> class -> tm -> vl' *)
-(*   | vrec  : vl' -> vl' (* NEW: recursive wrapper *) *)
-(*   | vcap  : vl'      (* NEW: capability *) *)
-(* with venv : Type := *)
-(*   | vnil : venv *)
-(*   | vcons : vl' -> venv -> venv *)
-(* . *)
 
 
 Hint Unfold venv.
@@ -1151,14 +1089,6 @@ Fixpoint logrel (T:ty) (m:mode) : nat -> vl -> Prop :=
 .
 
 
-(* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
-(* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
-
-
-(* termination proof when there's no recursion capability in the venv *)
-(* stemmed from the full_total_safety theorem *)
-
-
 
 Lemma termination : forall e cl tenv T,
     has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false ->
@@ -1218,8 +1148,26 @@ Proof.
     eapply cap_no_propagation.
     eapply cap_no_propagation.
     eapply cap_sanitize_irrelevant; eauto.
-
+    inversion H0; simpl; eauto.
+    admit.
   - (* Case tunrec *)
     destruct (IHW2 _ WFE) as [v [HEV HVL]].
     simpl in HVL. destruct v; inversion HVL.
-Qed.
+Admitted.
+
+(* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
+(* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
+
+
+(* termination proof when there's no recursion capability in the venv *)
+(* stemmed from the full_total_safety theorem *)
+
+Theorem combined_l_p_proof :
+  forall e cl tenv T M,
+    has_type tenv e cl T ->
+    forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false ->
+            exists v, tevaln venv e cl v ->
+                 forall step, logrel T M step v.
+Proof.
+  Admitted.  
+  
