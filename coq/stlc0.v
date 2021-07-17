@@ -775,6 +775,26 @@ Inductive wf_env_tnt : venv -> tenv -> Prop :=
     get_inv_idx vs = get_inv_idx ts ->
     wf_env_tnt (expand_env vs v n) (expand_env ts t n)
 .
+Inductive mode : Type :=
+| L : mode
+| P : mode
+.
+
+Inductive wf_env_tnt' : venv -> tenv -> mode -> Prop :=
+| wfe_tnt_nil' : forall n m, wf_env_tnt' (Def vl nil nil n) (Def ty nil nil n) m 
+
+| wfe_tnt_env_l : forall v t vs ts n,
+    val_type_tnt v t ->
+    wf_env_tnt vs ts ->
+    get_inv_idx vs = get_inv_idx ts ->
+    wf_env_tnt' (expand_env vs v n) (expand_env ts t n) L
+
+| wfe_tnt_env_p : forall v t vs ts n,
+    val_type_tnt v t ->
+    wf_env_tnt vs ts ->
+    get_inv_idx vs = get_inv_idx ts ->
+    wf_env_tnt' (expand_env vs v n) (expand_env ts t n) P 
+.
 
 
 Hint Constructors ty.
@@ -924,62 +944,6 @@ Lemma cap_sanitize_irrelevant :
 (* if well-typed, then result is an actual value (not stuck and not a timeout),
    for large enough n *)
 
-Theorem full_total_safety : forall e cl tenv T,
-  has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv ->
-  exists v, tevaln venv e cl v /\ val_type_tnt v T.
-Proof.
-  intros ? ? ? ? W.
-  induction W; intros ? WFE.
-
-  - (* Case "True". *) eexists. split.
-    exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
-  - (* Case "False". *) eexists. split.
-    exists 0. intros. destruct n0. lia. simpl. eauto. simpl. eauto.
-
-  - (* Case "Var". *)
-    destruct (lookup_safe_ex_tnt (sanitize_env n venv0) (sanitize_env n env0) T1 x) as [v IV].
-    eauto. eauto.
-    inversion IV as [I V].
-    exists v. split. exists 0. intros. destruct n0. lia. simpl. rewrite I. eauto. eapply V.
-
-  - (* Case "App". *)
-    (* destruct (IHW1 venv0 WFE). *)
-    destruct (IHW1 venv0 WFE) as [vf [IW1 HVF]].
-    destruct (IHW2 venv0 WFE) as [vx [IW2 HVX]].
-    simpl in HVF. destruct vf; try contradiction.
-    destruct HVF  as [? IHF].
-    destruct IHF as [vnFalse IHF'].
-    destruct (IHF' vx HVX) as [vy [IW3 HVY]].
-
-    exists vy. split. {
-      (* pick large enough n. nf+nx+ny will do. *)
-      destruct IW1 as [nf IWF].
-      destruct IW2 as [nx IWX].
-      destruct IW3 as [ny IWY].
-      exists (S (nf+nx+ny)). intros. destruct n0. lia. simpl. subst c.
-      rewrite IWF. rewrite IWX. rewrite IWY. eauto.
-      lia. lia. lia.
-    }
-    eapply HVY.
-
-  - (* Case "Abs". *)
-    eexists. split. exists 0. intros. destruct n0. lia. simpl. eauto.
-    simpl. repeat split; eauto. intros.
-
-    admit.
-
-    intros.
-    eapply IHW.
-    constructor. eauto. constructor. simpl; eauto. eauto.
-    eapply wf_idx_tnt. eauto. eapply wf_idx_tnt.
-    constructor. simpl; eauto. eauto. eapply wf_idx_tnt. eauto.
-
-  - (* Case tunrec *)
-    destruct (IHW2 _ WFE) as [v [HEV HVL]].
-    simpl in HVL. destruct v;  inversion HVL.
-
-Admitted. (* old theorem that can't be proven, as it doesn't have the essential premises on whether the value environment has rec capability or not *)
-
 
 (* Lemma tevalRec_deterministic : *)
 (*   forall v1 v2 env e cl , *)
@@ -999,98 +963,19 @@ Admitted. (* old theorem that can't be proven, as it doesn't have the essential 
 (* Qed. *)
 
 
-(* stating Top theorem about the environment. *)
 
-(* all Prog with no recursion cap will termniate.  *)
-
-
-
-Fixpoint map {X Y: Type} (f:X -> Y) (l:list X) : (list Y) :=
-  match l with
-  | [] => []
-  | h :: t => (f h) :: (map f t)
-  end.
-
-
-Fixpoint fold {X Y: Type} (f: X -> Y -> Y) (l: list X) (b: Y) : Y :=
-  match l with
-  | nil => b
-  | h :: t =>  f h (fold f t b)
-  end.
-
-Fixpoint contain_2ndCap_aux {X : Type } (ve : venv) : bool :=
-  match ve with
-  | Def _ l1 l2 m =>
-    match l2 with
-    | [] => false
-    | _ => true
-    end
-  end
-.
-
-Fixpoint  isRecCap (val : vl) : bool :=
-  match val with
-  | vrec _  => true
-  | _ => false
-  end
-.
+Lemma val_type_no_cap :
+  forall v T,
+    val_type_tnt v T -> contains_cap v = false.
+Proof.
+  intros.
+  induction v, T; try destruct H; eauto.
+  destruct H0.
+  induction e; simpl; eauto.
+Qed. 
 
 
-Notation "{{ ' p @ k | P }}" := (fun k v => match v with
-                                      | p => P
-                                      | _ => False
-                                      end)
-                              (at level 0, p pattern, k ident ).
-Notation "{{ ' p }}" := {{ ' p @ k | True }} (at level 0, p pattern).
-Notation "∅" := (fun k v => False).
-
-Inductive mode : Type :=
-| L : mode
-| P : mode
-.
-
-(*TODO: formulate an environment relation that combines the requirements for logical and programmatic fragment, as in Zombie *)
-(*TODO: state and prove the combined soundness/termination theorem*)
-(*TODO: soundness and termination interpretations use two different evaluations teval/teval', there should be just a single one. *)
-Fixpoint logrel (T:ty) (m:mode) : nat -> vl -> Prop :=
-  match T with
-  | TBool          => {{ '(vbool _) }}
-  | TFun T1 clt T2 => match m with
-                     | L => {{ '(vabs env clv y) @ k | (clv = clt)
-                       /\ venv_contains_cap env = false
-                       /\ forall j, j <= k ->
-                          forall vx, logrel T1 L j vx ->
-                (* would it be necessary to use the step index as the fuel for teval here? *)
-                (* under which class should the lambda body evaluate? *)
-                                exists vy, tevaln (expand_env
-                                   (expand_env env
-                                      (vrec (vabs env clv y)) Second) vx clv) y First vy
-                                      /\ logrel T2 L j vy }}
-                     | P => {{ '(vabs env clv y) @ k | (clv = clt)
-                       /\ venv_contains_cap env = true 
-                       /\  forall i, i < k ->
-                            forall vx, logrel T1 P i vx ->
-                              forall j, j <= i ->
-                                  forall vy, teval j (expand_env
-                                          (expand_env env (vrec (vabs env clv y))
-                                         Second) vx clv) y clv = Some (Some vy) ->
-                                        logrel T2 P (k - j) vy }} 
- (* it would be more elegant if the evaluator returns the *remaining* instead of the *used amount* of fuel, as teval' does currently. Then we can pass the remaining fuel to the logrel (should be stricly less than input fuel k) and don't need the explicit subtraction   *)
-                     end
-  | TRec T         => match m with
-                     | L => {{ 'vrec _ }}
-                     | P => {{ '(vrec v) @ k | forall j, j < k -> logrel T P j v }}
-                     end
-  | TCap           => match m with
-                     | L => ∅
-                     | P => {{ 'vcap }}
-                     end
-  end
-.
-
-
-
-Lemma termination : forall e cl tenv T,
+Lemma full_total_safety_L : forall e cl tenv T,
     has_type tenv e cl T -> forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false ->
   exists v, tevaln venv e cl v /\ val_type_tnt v T.
 Proof.
@@ -1131,7 +1016,7 @@ Proof.
 
   - (* Case "Abs". *)
     eexists. split. exists 0. intros. destruct n0. lia. simpl. eauto.
-    simpl. repeat split; eauto. intros.
+    simpl. repeat split; eauto.
     destruct WFE as [WF VEF].
     eapply cap_sanitize_irrelevant. auto.
     intros.
@@ -1144,16 +1029,71 @@ Proof.
 
     destruct WFE. eauto.
     eapply wf_idx_tnt. destruct WFE. eauto.
+
+    
     destruct WFE.
     eapply cap_no_propagation.
     eapply cap_no_propagation.
     eapply cap_sanitize_irrelevant; eauto.
     inversion H0; simpl; eauto.
-    admit.
+
+    apply val_type_no_cap with ( T := T1).
+    auto.
   - (* Case tunrec *)
     destruct (IHW2 _ WFE) as [v [HEV HVL]].
     simpl in HVL. destruct v; inversion HVL.
-Admitted.
+Qed.
+
+
+Notation "{{ ' p @ k | P }}" := (fun k v => match v with
+                                      | p => P
+                                      | _ => False
+                                      end)
+                              (at level 0, p pattern, k ident ).
+Notation "{{ ' p }}" := {{ ' p @ k | True }} (at level 0, p pattern).
+Notation "∅" := (fun k v => False).
+
+
+
+
+(*TODO: formulate an environment relation that combines the requirements for logical and programmatic fragment, as in Zombie *)
+(*TODO: state and prove the combined soundness/termination theorem*)
+(*TODO: soundness and termination interpretations use two different evaluations teval/teval', there should be just a single one. *)
+Fixpoint logrel (T:ty) (m:mode) : nat -> vl -> Prop :=
+  match T with
+  | TBool          => {{ '(vbool _) }}
+  | TFun T1 clt T2 => match m with
+                     | L => {{ '(vabs env clv y) @ k | (clv = clt)
+                       /\ venv_contains_cap env = false
+                       /\ forall j, j <= k ->
+                          forall vx, logrel T1 L j vx ->
+                (* would it be necessary to use the step index as the fuel for teval here? *)
+                (* under which class should the lambda body evaluate? *)
+                                exists vy, tevaln (expand_env
+                                   (expand_env env
+                                      (vrec (vabs env clv y)) Second) vx clv) y First vy
+                                      /\ logrel T2 L j vy }}
+                     | P => {{ '(vabs env clv y) @ k | (clv = clt)
+                       /\ venv_contains_cap env = true 
+                       /\  forall i, i < k ->
+                            forall vx, logrel T1 P i vx ->
+                              forall j, j <= i ->
+                                  forall vy, teval j (expand_env
+                                          (expand_env env (vrec (vabs env clv y))
+                                         Second) vx clv) y clv = Some (Some vy) ->
+                                        logrel T2 P (k - j) vy }} 
+ (* it would be more elegant if the evaluator returns the *remaining* instead of the *used amount* of fuel, as teval' does currently. Then we can pass the remaining fuel to the logrel (should be stricly less than input fuel k) and don't need the explicit subtraction   *)
+                     end
+  | TRec T         => match m with
+                     | L => {{ 'vrec _ }}
+                     | P => {{ '(vrec v) @ k | forall j, j < k -> logrel T P j v }}
+                     end
+  | TCap           => match m with
+                     | L => ∅
+                     | P => {{ 'vcap }}
+                     end
+  end
+.
 
 (* Logic + term e that terminates --> safe ( world with no recursion cap ) *)
 (* term e that are non-terminating ---> unsafe ( world with recursion cap ) *)
@@ -1165,9 +1105,32 @@ Admitted.
 Theorem combined_l_p_proof :
   forall e cl tenv T M,
     has_type tenv e cl T ->
-    forall venv, wf_env_tnt venv tenv /\ venv_contains_cap venv = false ->
+    forall venv, wf_env_tnt' venv tenv L ->
             exists v, tevaln venv e cl v ->
-                 forall step, logrel T M step v.
+                 forall step, logrel T L step v
+
+
+                         \/
+                         forall e cl tenv T M,
+                           has_type tenv e cl T ->
+                           forall venv, wf_env_tnt' venv tenv P ->
+                                   exists v, tevaln venv e cl v ->
+                                        forall step, logrel T P step v. 
+
 Proof.
-  Admitted.  
+intros ? ? ? ? ? H.
+intros.  eexists.
+intros; simpl.
+induction H.
+- (* TBool ttrue case *)
+  inversion H1.
+  simpl. (* instantiate (1 := (Some (Some vbool true))). *)
+  destruct H0 as [WFE VCP].
+  
+- (* TBool false case *)
+- (* TVar case *)
+- (* TApp case *)
+- (* TFun case *)
+- (* TUnrec case *) 
+  Admitted.   
   
